@@ -1,6 +1,6 @@
 module multithread_downloading
 
-go 1.22
+go 1.21
 
 require (
 	github.com/VividCortex/ewma v1.2.0 // indirect

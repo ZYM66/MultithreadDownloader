@@ -1,4 +1,4 @@
-package downloader
+package storage
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ type ChunkWriterBlock struct {
 	Offset int64
 }
 
+// SaveInDisk is the function that read ChunkWriterBlock from channel then write the buffer to disk
 func SaveInDisk(SaveChannel chan ChunkWriterBlock, ChunkSize int, File *os.File) {
 	for i := 0; i < ChunkSize; i++ {
 		block, _ := <-SaveChannel
