@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func timeCost(start time.Time) {
+func TimeCost(start time.Time) {
 	tc := time.Since(start)
 	fmt.Printf("time cost = %v\n", tc)
 }
