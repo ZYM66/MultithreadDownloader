@@ -11,7 +11,6 @@ import (
 	"multithread_downloading/common"
 	"multithread_downloading/config"
 	downloaderconfig "multithread_downloading/config/downloader"
-	"multithread_downloading/downloader"
 	"multithread_downloading/storage"
 	"net/http"
 	"time"
@@ -37,24 +36,23 @@ func (d *MultiThreadDownLoader) NewDownloader(configs config.DownloaderConfig) {
 func (d *MultiThreadDownLoader) DownLoad() {
 	// build client
 	client := c.NewClient()
-	//client := &http.Client{}
 	// build chunks
-	chunks := downloader.BuildChunk(client, d.URL, d.ChunkSize)
+	chunks := BuildChunk(client, d.URL, d.ChunkSize)
 	// create file in disk
 	File := storage.GetFileToSave(d.OutputPath)
 	// build output channel
-	WriterBlock := storage.BuildOutputChannel()
+	OutputChannel := storage.BuildOutputChannel()
 	// download file
-	go DispatchMultiThreadDownload(chunks, d.URL, client, WriterBlock)
+	go DispatchMultiThreadDownload(chunks, d.URL, client, OutputChannel)
 	// save download file into disk
-	storage.SaveInDisk(WriterBlock, d.ChunkSize, File)
+	storage.SaveInDisk(OutputChannel, d.ChunkSize, File)
 
 	defer File.Close()
 
 }
 
 // DispatchMultiThreadDownload is the function that execute the MultiThreadDownload
-func DispatchMultiThreadDownload(Chunks []downloader.Chunk, URL string, Client *http.Client, SaveChannel chan storage.ChunkWriterBlock) {
+func DispatchMultiThreadDownload(Chunks []Chunk, URL string, Client *http.Client, SaveChannel chan storage.ChunkWriterBlock) {
 	p := mpb.New(mpb.WithRefreshRate(180 * time.Millisecond))
 	// download file
 	for i := 0; i < len(Chunks); i++ {
@@ -68,7 +66,6 @@ func DispatchMultiThreadDownload(Chunks []downloader.Chunk, URL string, Client *
 			resp, err := Client.Do(req)
 			common.Check(err)
 
-			//add progressbar
 			// Check the status code and Content-Range header
 			for {
 				if resp.StatusCode != http.StatusPartialContent {
@@ -78,6 +75,7 @@ func DispatchMultiThreadDownload(Chunks []downloader.Chunk, URL string, Client *
 				}
 			}
 
+			//add progressbar
 			bar := p.New(resp.ContentLength,
 				mpb.BarStyle().Rbound("|"),
 				mpb.PrependDecorators(
@@ -90,6 +88,7 @@ func DispatchMultiThreadDownload(Chunks []downloader.Chunk, URL string, Client *
 				),
 			)
 			common.Check(err)
+
 			defer resp.Body.Close()
 
 			offset := Chunks[i].Start

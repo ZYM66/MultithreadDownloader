@@ -1,4 +1,4 @@
-package downloader
+package multithread_downloader
 
 import (
 	"log"

@@ -12,7 +12,7 @@ type ChunkWriterBlock struct {
 }
 
 // SaveInDisk is the function that read ChunkWriterBlock from channel then write the buffer to disk
-func SaveInDisk(SaveChannel chan ChunkWriterBlock, ChunkSize int, File *os.File) {
+func SaveInDisk(SaveChannel <-chan ChunkWriterBlock, ChunkSize int, File *os.File) {
 	for i := 0; i < ChunkSize; i++ {
 		block, _ := <-SaveChannel
 
