@@ -2,7 +2,6 @@
 package multithread_downloader
 
 import (
-	"bytes"
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 	"io"
@@ -13,6 +12,7 @@ import (
 	downloaderconfig "multithread_downloading/config/downloader"
 	"multithread_downloading/storage"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -22,7 +22,8 @@ type MultiThreadDownLoader struct {
 	OutputPath string
 }
 
-func (d *MultiThreadDownLoader) NewDownloader(configs config.DownloaderConfig) {
+func NewMultiThreadDownloader(configs config.DownloaderConfig) MultiThreadDownLoader {
+	d := MultiThreadDownLoader{}
 	if v, ok := configs.(downloaderconfig.MultiThreadConfig); ok {
 		d.ChunkSize = v.ChunkSize
 	} else {
@@ -30,7 +31,7 @@ func (d *MultiThreadDownLoader) NewDownloader(configs config.DownloaderConfig) {
 	}
 	d.URL = configs.GetTarget()
 	d.OutputPath = configs.GetOutputPath()
-
+	return d
 }
 
 func (d *MultiThreadDownLoader) DownLoad() {
@@ -45,7 +46,7 @@ func (d *MultiThreadDownLoader) DownLoad() {
 	// download file
 	go DispatchMultiThreadDownload(chunks, d.URL, client, OutputChannel)
 	// save download file into disk
-	storage.SaveInDisk(OutputChannel, d.ChunkSize, File)
+	storage.SaveInDisk(OutputChannel, File)
 
 	defer File.Close()
 
@@ -55,8 +56,11 @@ func (d *MultiThreadDownLoader) DownLoad() {
 func DispatchMultiThreadDownload(Chunks []Chunk, URL string, Client *http.Client, SaveChannel chan storage.ChunkWriterBlock) {
 	p := mpb.New(mpb.WithRefreshRate(180 * time.Millisecond))
 	// download file
+	var wg sync.WaitGroup
 	for i := 0; i < len(Chunks); i++ {
+		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			header := c.NewHeader()
 			header.HeaderAddRange(Chunks[i].Start, Chunks[i].End)
 			req, err := http.NewRequest("GET", URL, nil)
@@ -94,13 +98,27 @@ func DispatchMultiThreadDownload(Chunks []Chunk, URL string, Client *http.Client
 			offset := Chunks[i].Start
 
 			// write file
-			var buffer bytes.Buffer
 			proxyReader := bar.ProxyReader(resp.Body)
-			_, err = io.Copy(&buffer, proxyReader)
-			common.Check(err)
-
-			// write into channel
-			SaveChannel <- storage.ChunkWriterBlock{Buf: buffer, Offset: offset}
+			buf := make([]byte, 32*1024) // 32KB buffer
+			for {
+				n, err := proxyReader.Read(buf)
+				if err != nil {
+					if err == io.EOF {
+						break
+					} else {
+						common.Check(err)
+					}
+				}
+				// 深拷贝 buf[:n] 到一个新的切片中，确保传递给 SaveChannel 的数据独立
+				SaveChannel <- storage.ChunkWriterBlock{Buf: append([]byte{}, buf[:n]...), Offset: offset}
+				offset += int64(n)
+			}
 		}(i)
+
 	}
+	// close the SaveChannel
+	go func() {
+		wg.Wait()
+		close(SaveChannel)
+	}()
 }
