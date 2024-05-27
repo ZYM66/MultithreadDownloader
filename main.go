@@ -12,7 +12,7 @@ import (
 )
 
 // const URL = "https://c-ssl.duitang.com/uploads/blog/202307/19/6zS5QGX8tqADG4M.jpeg"
-//const URL = "https://bit.ly/1GB-testfile"
+// const URL = "https://bit.ly/1GB-testfile"
 
 // const URL = "https://ash-speed.hetzner.com/10GB.bin"
 var (
@@ -38,7 +38,7 @@ func main() {
 		p := strings.Split(URL, "/")
 		PATH = p[len(p)-1]
 	}
-	downloadConfig := downloaderconfig.MultiThreadConfig{Target: URL, ChunkSize: ChunkSize, OutputPath: PATH}
+	downloadConfig := downloaderconfig.MultiThreadConfig{Target: URL, NumChunk: ChunkSize, OutputPath: PATH}
 	downloaderAgent := multithread_downloader.NewMultiThreadDownloader(downloadConfig)
 	downloaderAgent.DownLoad()
 

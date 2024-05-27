@@ -12,68 +12,71 @@ import (
 	downloaderconfig "multithread_downloading/config/downloader"
 	"multithread_downloading/storage"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
 
 type MultiThreadDownLoader struct {
-	URL        string
-	ChunkSize  int
-	OutputPath string
+	URL           string
+	NumChunk      int
+	OutputPath    string
+	TargetFile    *os.File
+	ContendLength int64
+	Chunks        []Chunk
+	Client        *http.Client
 }
 
 func NewMultiThreadDownloader(configs config.DownloaderConfig) MultiThreadDownLoader {
 	d := MultiThreadDownLoader{}
 	if v, ok := configs.(downloaderconfig.MultiThreadConfig); ok {
-		d.ChunkSize = v.ChunkSize
+		d.NumChunk = v.NumChunk
 	} else {
 		log.Fatal("Invalid config")
 	}
 	d.URL = configs.GetTarget()
 	d.OutputPath = configs.GetOutputPath()
+	// build client
+	d.Client = c.NewClient()
+	d.BuildChunk()
+	d.TargetFile = storage.GetFileToSave(d.OutputPath, d.ContendLength)
 	return d
 }
 
 func (d *MultiThreadDownLoader) DownLoad() {
-	// build client
-	client := c.NewClient()
-	// build chunks
-	chunks := BuildChunk(client, d.URL, d.ChunkSize)
-	// create file in disk
-	File := storage.GetFileToSave(d.OutputPath)
 	// build output channel
 	OutputChannel := storage.BuildOutputChannel()
 	// download file
-	go DispatchMultiThreadDownload(chunks, d.URL, client, OutputChannel)
+	go d.DispatchMultiThreadDownload(OutputChannel)
 	// save download file into disk
-	storage.SaveInDisk(OutputChannel, File)
+	storage.SaveInDisk(OutputChannel, d.TargetFile)
 
-	defer File.Close()
+	defer d.TargetFile.Close()
 
 }
 
 // DispatchMultiThreadDownload is the function that execute the MultiThreadDownload
-func DispatchMultiThreadDownload(Chunks []Chunk, URL string, Client *http.Client, SaveChannel chan storage.ChunkWriterBlock) {
+func (d *MultiThreadDownLoader) DispatchMultiThreadDownload(SaveChannel chan storage.ChunkBlock) {
 	p := mpb.New(mpb.WithRefreshRate(180 * time.Millisecond))
 	// download file
 	var wg sync.WaitGroup
-	for i := 0; i < len(Chunks); i++ {
+	for i := 0; i < len(d.Chunks); i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			header := c.NewHeader()
-			header.HeaderAddRange(Chunks[i].Start, Chunks[i].End)
-			req, err := http.NewRequest("GET", URL, nil)
+			header.HeaderAddRange(d.Chunks[i].Start, d.Chunks[i].End)
+			req, err := http.NewRequest("GET", d.URL, nil)
 			common.Check(err)
 
 			req.Header = header.GetHttpHeader()
-			resp, err := Client.Do(req)
+			resp, err := d.Client.Do(req)
 			common.Check(err)
 
-			// Check the status code and Content-Range header
+			// Check the status code and Content-Range header, if not 206 Partial Content, re-send the request
 			for {
 				if resp.StatusCode != http.StatusPartialContent {
-					resp, err = Client.Do(req)
+					resp, err = d.Client.Do(req)
 				} else {
 					break
 				}
@@ -95,7 +98,7 @@ func DispatchMultiThreadDownload(Chunks []Chunk, URL string, Client *http.Client
 
 			defer resp.Body.Close()
 
-			offset := Chunks[i].Start
+			offset := d.Chunks[i].Start
 
 			// write file
 			proxyReader := bar.ProxyReader(resp.Body)
@@ -110,7 +113,7 @@ func DispatchMultiThreadDownload(Chunks []Chunk, URL string, Client *http.Client
 					}
 				}
 				// 深拷贝 buf[:n] 到一个新的切片中，确保传递给 SaveChannel 的数据独立
-				SaveChannel <- storage.ChunkWriterBlock{Buf: append([]byte{}, buf[:n]...), Offset: offset}
+				SaveChannel <- storage.ChunkBlock{Buf: append([]byte{}, buf[:n]...), Offset: offset}
 				offset += int64(n)
 			}
 		}(i)

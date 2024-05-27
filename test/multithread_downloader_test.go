@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewDownloader(t *testing.T) {
-	downloadConfig := downloaderconfig.MultiThreadConfig{Target: "https://example.com", ChunkSize: 4, OutputPath: "output.txt"}
+	downloadConfig := downloaderconfig.MultiThreadConfig{Target: "https://example.com", NumChunk: 4, OutputPath: "output.txt"}
 	downloaderAgent := multithread_downloader.MultiThreadDownLoader{}
 	downloaderAgent.NewDownloader(downloadConfig)
 }

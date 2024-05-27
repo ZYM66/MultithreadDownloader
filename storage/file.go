@@ -2,7 +2,7 @@ package storage
 
 import (
 	"fmt"
-	"log"
+	"multithread_downloading/common"
 	"os"
 )
 
@@ -18,12 +18,14 @@ func PathExists(path string) (bool, error) {
 }
 
 // GetFileToSave is the function that create a file in disk to save the bytes got from network
-func GetFileToSave(FilePath string) *os.File {
+func GetFileToSave(FilePath string, ContendLength int64) *os.File {
 	if ok, _ := PathExists(FilePath); !ok {
 		file, err := os.OpenFile(FilePath, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatal(err.Error())
-		}
+		common.Check(err)
+		// set the file size
+		err = file.Truncate(ContendLength)
+		fmt.Println(ContendLength)
+		common.Check(err)
 		return file
 	} else {
 		stat, _ := os.Stat(FilePath)

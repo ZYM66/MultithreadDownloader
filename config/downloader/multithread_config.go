@@ -3,7 +3,7 @@ package downloaderconfig
 type MultiThreadConfig struct {
 	Target     string
 	OutputPath string
-	ChunkSize  int
+	NumChunk   int
 }
 
 func (c MultiThreadConfig) GetTarget() string {
