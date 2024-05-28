@@ -6,6 +6,7 @@
 [![Build Status](https://travis-ci.org/abhishekkr/multithread-downloader.svg?branch=master)](https://travis-ci.org/abhishekkr/multithread-downloader)
 [![Coverage Status](https://coveralls.io/repos/github/abhishekkr/multithread-downloader/badge.svg?branch=master)](https://coveralls.io/github/abhishekkr/multithread-downloader?branch=master)
 
+<img alt="img.png" height="300" src="img.png" width="350"/>
 
 ```bash
 Usage of multithread_downloading:

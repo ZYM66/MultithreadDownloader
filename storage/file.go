@@ -24,7 +24,6 @@ func GetFileToSave(FilePath string, ContendLength int64) *os.File {
 		common.Check(err)
 		// set the file size
 		err = file.Truncate(ContendLength)
-		fmt.Println(ContendLength)
 		common.Check(err)
 		return file
 	} else {
