@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"multithread_downloading/common"
 	downloaderconfig "multithread_downloading/config/downloader"
 	"multithread_downloading/downloader/multithread_downloader"
 	"multithread_downloading/statistic"
@@ -16,29 +17,33 @@ import (
 
 // const URL = "https://ash-speed.hetzner.com/10GB.bin"
 var (
-	URL       string
+	URLs      []string
 	PATH      string
 	ChunkSize int
 )
 
 func init() {
-	flag.StringVar(&URL, "url", "", "file url")
-	flag.StringVar(&PATH, "path", "", "file save path")
+	flag.Var((*common.StringSlice)(&URLs), "url", "file urls separated by comma")
+	flag.StringVar(&PATH, "path", "./", "file save path")
 	flag.IntVar(&ChunkSize, "num_thread", 4, "number of download thread")
 	flag.Parse()
 }
 
+// todo: 下载完成后sha256校验
+// todo: 断点续传
+
 func main() {
 
 	defer statistic.TimeCost(time.Now())
-	if URL == "" {
+	if len(URLs) == 0 {
 		log.Fatal("Invalid URL")
+	} else {
+		for i := range URLs {
+			URLs[i] = strings.TrimSpace(URLs[i])
+		}
 	}
-	if PATH == "" {
-		p := strings.Split(URL, "/")
-		PATH = p[len(p)-1]
-	}
-	downloadConfig := downloaderconfig.MultiThreadConfig{Target: URL, NumChunk: ChunkSize, OutputPath: PATH}
+
+	downloadConfig := downloaderconfig.MultiThreadConfig{Target: URLs, NumChunk: ChunkSize, OutputPath: PATH, HeaderConfig: downloaderconfig.HeaderConfig{UA: "netdisk;PC"}}
 	downloaderAgent := multithread_downloader.NewMultiThreadDownloader(downloadConfig)
 	downloaderAgent.DownLoad()
 

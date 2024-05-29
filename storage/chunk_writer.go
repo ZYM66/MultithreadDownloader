@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"log"
 	"os"
 )
 
@@ -19,7 +18,7 @@ func SaveInDisk(SaveChannel <-chan ChunkBlock, File *os.File) {
 	for block := range SaveChannel {
 		_, err := File.WriteAt(block.Buf, block.Offset)
 		if err != nil {
-			log.Fatal(err.Error())
+			panic(err.Error())
 		}
 	}
 }

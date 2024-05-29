@@ -5,10 +5,8 @@ import (
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 	"io"
-	"log"
 	c "multithread_downloading/client"
 	"multithread_downloading/common"
-	"multithread_downloading/config"
 	downloaderconfig "multithread_downloading/config/downloader"
 	"multithread_downloading/storage"
 	"net/http"
@@ -18,58 +16,92 @@ import (
 )
 
 type MultiThreadDownLoader struct {
+	Files        []File
+	NumChunk     int
+	Client       *http.Client
+	HeaderConfig downloaderconfig.HeaderConfig
+}
+
+type File struct {
+	Name          string
 	URL           string
-	NumChunk      int
 	OutputPath    string
 	TargetFile    *os.File
 	ContendLength int64
 	Chunks        []Chunk
-	Client        *http.Client
 }
 
-func NewMultiThreadDownloader(configs config.DownloaderConfig) MultiThreadDownLoader {
+func NewMultiThreadDownloader(configs downloaderconfig.MultiThreadConfig) MultiThreadDownLoader {
 	d := MultiThreadDownLoader{}
-	if v, ok := configs.(downloaderconfig.MultiThreadConfig); ok {
-		d.NumChunk = v.NumChunk
-	} else {
-		log.Fatal("Invalid config")
-	}
-	d.URL = configs.GetTarget()
-	d.OutputPath = configs.GetOutputPath()
-	// build client
 	d.Client = c.NewClient()
-	d.BuildChunk()
-	d.TargetFile = storage.GetFileToSave(d.OutputPath, d.ContendLength)
+	d.NumChunk = configs.NumChunk
+	d.Files = make([]File, len(configs.GetTarget()))
+	d.HeaderConfig = configs.HeaderConfig
+
+	for i, target := range configs.GetTarget() {
+		f := File{}
+		f.URL = target
+		f.OutputPath = configs.GetOutputPath()
+		f.BuildChunk(d.Client, d.NumChunk)
+		f.TargetFile = storage.GetFileToSave(f.OutputPath+f.Name, f.ContendLength)
+		d.Files[i] = f
+	}
+
 	return d
 }
 
 func (d *MultiThreadDownLoader) DownLoad() {
-	// build output channel
-	OutputChannel := storage.BuildOutputChannel()
-	// download file
-	go d.DispatchMultiThreadDownload(OutputChannel)
-	// save download file into disk
-	storage.SaveInDisk(OutputChannel, d.TargetFile)
-
-	defer d.TargetFile.Close()
-
-}
-
-// DispatchMultiThreadDownload is the function that execute the MultiThreadDownload
-func (d *MultiThreadDownLoader) DispatchMultiThreadDownload(SaveChannel chan storage.ChunkBlock) {
-	p := mpb.New(mpb.WithRefreshRate(180 * time.Millisecond))
-	// download file
 	var wg sync.WaitGroup
-	for i := 0; i < len(d.Chunks); i++ {
+	closeChan := make(chan int, len(d.Files))
+
+	for i := 0; i < len(d.Files); i++ {
+		// build output channel
+		OutputChannel := storage.BuildOutputChannel()
+
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			header := c.NewHeader()
-			header.HeaderAddRange(d.Chunks[i].Start, d.Chunks[i].End)
-			req, err := http.NewRequest("GET", d.URL, nil)
+
+			// download file
+			d.Files[i].DispatchMultiThreadDownload(OutputChannel, d)
+
+			// save download file into disk
+			storage.SaveInDisk(OutputChannel, d.Files[i].TargetFile)
+
+			// signal that this file is done
+			closeChan <- i
+		}(i)
+	}
+
+	go func() {
+		wg.Wait()        // Wait for all downloads and saves to finish
+		close(closeChan) // Close the channel to signal that all files are done
+	}()
+
+	// Close files as they finish
+	for range closeChan {
+		i := <-closeChan
+		d.Files[i].TargetFile.Close()
+	}
+}
+
+// DispatchMultiThreadDownload is the function that execute the MultiThreadDownload
+func (f *File) DispatchMultiThreadDownload(SaveChannel chan storage.ChunkBlock, d *MultiThreadDownLoader) {
+	p := mpb.New(mpb.WithRefreshRate(180 * time.Millisecond))
+	// download file
+	var wg sync.WaitGroup
+	for i := 0; i < len(f.Chunks); i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// chunk download header
+			Header := c.NewHeader(d.HeaderConfig)
+			Header.HeaderAddRange(f.Chunks[i].Start, f.Chunks[i].End)
+
+			req, err := http.NewRequest("GET", f.URL, nil)
 			common.Check(err)
 
-			req.Header = header.GetHttpHeader()
+			req.Header = Header.GetHttpHeader()
 			resp, err := d.Client.Do(req)
 			common.Check(err)
 
@@ -98,7 +130,7 @@ func (d *MultiThreadDownLoader) DispatchMultiThreadDownload(SaveChannel chan sto
 
 			defer resp.Body.Close()
 
-			offset := d.Chunks[i].Start
+			offset := f.Chunks[i].Start
 
 			// write file
 			proxyReader := bar.ProxyReader(resp.Body)

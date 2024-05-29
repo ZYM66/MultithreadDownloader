@@ -1,12 +1,13 @@
 package downloaderconfig
 
 type MultiThreadConfig struct {
-	Target     string
-	OutputPath string
-	NumChunk   int
+	HeaderConfig HeaderConfig
+	Target       []string
+	OutputPath   string
+	NumChunk     int
 }
 
-func (c MultiThreadConfig) GetTarget() string {
+func (c MultiThreadConfig) GetTarget() []string {
 	return c.Target
 }
 
